@@ -3,7 +3,6 @@
 import os
 import sys
 import urllib
-import shutil
 import unicodedata
 import xbmc
 import xbmcvfs
@@ -18,18 +17,18 @@ except ImportError:
     # Python 2.5 and earlier
     from md5 import new as md5
 
-__addon__ = xbmcaddon.Addon()
-__scriptid__ = __addon__.getAddonInfo('id')
-__scriptname__ = __addon__.getAddonInfo('name')
-__version__ = __addon__.getAddonInfo('version')
-__language__ = __addon__.getLocalizedString
+_ADDON = xbmcaddon.Addon()
+_SCRIPTID = _ADDON.getAddonInfo('id')
+_SCRIPTNAME = _ADDON.getAddonInfo('name')
+_VERSION = _ADDON.getAddonInfo('version')
+_LANGUAGE = _ADDON.getLocalizedString
 
-__cwd__ = xbmc.translatePath(__addon__.getAddonInfo('path')).decode("utf-8")
-__profile__ = xbmc.translatePath(__addon__.getAddonInfo('profile')).decode("utf-8")
-__resource__ = xbmc.translatePath(os.path.join(__cwd__, 'resources', 'lib')).decode("utf-8")
-__temp__ = xbmc.translatePath(os.path.join(__profile__, 'temp', '')).decode("utf-8")
+_CWD = xbmc.translatePath(_ADDON.getAddonInfo('path')).decode("utf-8")
+_PROFILE = xbmc.translatePath(_ADDON.getAddonInfo('profile')).decode("utf-8")
+_RESOURCE = xbmc.translatePath(os.path.join(_CWD, 'resources', 'lib')).decode("utf-8")
+TEMP_FOLDER = xbmc.translatePath(os.path.join(_PROFILE, 'temp', '')).decode("utf-8")
 
-sys.path.append(__resource__)
+sys.path.append(_RESOURCE)
 
 from SubTiTool import SubTiToolHelper
 
@@ -94,9 +93,11 @@ def Search(item,langs):
     helper = SubTiToolHelper(filename, md5hash)
     results = helper.search(item, t, langs)
 
+    if results is None:
+        return
+
     results = results.getElementsByTagName('Subtitle')
     for node in results:
-
         sTitle = node.getElementsByTagName('TITLE')[0].firstChild.data
         sLang = node.getElementsByTagName('LANGUAGE')[0].firstChild.data
         sTitle = node.getElementsByTagName('TITLE')[0].firstChild.data
@@ -104,7 +105,7 @@ def Search(item,langs):
         sRate = node.getElementsByTagName('RATE')[0].firstChild.data
         if sLang == "Farsi/Persian": sLang = "Persian"
 
-        listitem = xbmcgui.ListItem(label=xbmc.convertLanguage(sLang, xbmc.ENGLISH_NAME),
+        listitem = xbmcgui.ListItem(label=sLang,
                                     # language name for the found subtitle
                                     label2=sTitle,  # file name for the found subtitle
                                     iconImage=sRate,  # rating for the subtitle, string 0-5
@@ -119,7 +120,7 @@ def Search(item,langs):
         ## below arguments are optional, it can be used to pass any info needed in download function
         ## anything after "action=download&" will be sent to addon once user clicks listed subtitle to download
         url = "plugin://%s/?action=download&l=%s&f=%s&filename=%s&dllink=%s" % (
-            __scriptid__, sLang, md5hash, filename, sDlLink)
+            _SCRIPTID, sLang, md5hash, filename, sDlLink)
         ## add it to list, this can be done as many times as needed for all subtitles found
         xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]), url=url, listitem=listitem, isFolder=False)
 
@@ -128,12 +129,12 @@ def Download(language, hash, filename, dlLink):
     subtitle_list = []
     ## Cleanup temp dir, we recomend you download/unzip your subs in temp folder and
     ## pass that to XBMC to copy and activate
-    if xbmcvfs.exists(__temp__):
-        shutil.rmtree(__temp__)
-    xbmcvfs.mkdirs(__temp__)
+    if xbmcvfs.exists(TEMP_FOLDER):
+        xbmcvfs.rmdir(TEMP_FOLDER,True)
+    xbmcvfs.mkdirs(TEMP_FOLDER)
     filename = os.path.basename(xbmc.Player().getPlayingFile().decode('utf-8'))
     filename = filename[:filename.rfind(".")] + ".srt"
-    filename = os.path.join(__temp__, filename)
+    filename = os.path.join(TEMP_FOLDER, filename)
     napiHelper = SubTiToolHelper(filename, hash)
     filename = napiHelper.download(dlLink,language)
     subtitle_list.append(filename)  # this can be url, local path or network path.
@@ -168,8 +169,15 @@ def get_params():
 
 params = get_params()
 
-if params['action'] == 'search':
+if params['action'] == 'search' or params['action'] == 'manualsearch':
     item = {}
+    if 'searchstring' in params:
+        item['mansearch'] = True
+        item['mansearchstr'] = params['searchstring']
+    else:
+        item['mansearch'] = False
+        item['mansearchstr'] = ''
+
     item['temp'] = False
     item['rar'] = False
     item['year'] = xbmc.getInfoLabel("VideoPlayer.Year")  # Year
